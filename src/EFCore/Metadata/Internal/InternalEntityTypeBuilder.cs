@@ -55,7 +55,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
                 }
             }
             else if (previousPrimaryKey != null
-                && PropertyListComparer.Instance.Compare(previousPrimaryKey.Properties, properties) == 0)
+                     && PropertyListComparer.Instance.Compare(previousPrimaryKey.Properties, properties) == 0)
             {
                 return Metadata.SetPrimaryKey(properties, configurationSource).Builder;
             }
@@ -1614,7 +1614,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
             [NotNull] string targetEntityTypeName,
             [NotNull] string navigationName,
             ConfigurationSource configurationSource)
-            => Owns(new TypeIdentity(targetEntityTypeName), PropertyIdentity.Create(navigationName), configurationSource);
+            => Owns(new TypeIdentity(targetEntityTypeName), PropertyIdentity.Create(navigationName), null, configurationSource);
 
         /// <summary>
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
@@ -1624,7 +1624,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
             [NotNull] string targetEntityTypeName,
             [NotNull] PropertyInfo navigationProperty,
             ConfigurationSource configurationSource)
-            => Owns(new TypeIdentity(targetEntityTypeName), PropertyIdentity.Create(navigationProperty), configurationSource);
+            => Owns(new TypeIdentity(targetEntityTypeName), PropertyIdentity.Create(navigationProperty), null, configurationSource);
 
         /// <summary>
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
@@ -1634,7 +1634,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
             [NotNull] Type targetEntityType,
             [NotNull] string navigationName,
             ConfigurationSource configurationSource)
-            => Owns(new TypeIdentity(targetEntityType), PropertyIdentity.Create(navigationName), configurationSource);
+            => Owns(new TypeIdentity(targetEntityType), PropertyIdentity.Create(navigationName), null, configurationSource);
 
         /// <summary>
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
@@ -1644,14 +1644,29 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Internal
             [NotNull] Type targetEntityType,
             [NotNull] PropertyInfo navigationProperty,
             ConfigurationSource configurationSource)
-            => Owns(new TypeIdentity(targetEntityType), PropertyIdentity.Create(navigationProperty), configurationSource);
+            => Owns(new TypeIdentity(targetEntityType), PropertyIdentity.Create(navigationProperty), null, configurationSource);
+
+        /// <summary>
+        ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
+        ///     directly from your code. This API may change or be removed in future releases.
+        /// </summary>
+        public virtual InternalRelationshipBuilder Owns(
+            [NotNull] Type targetEntityType,
+            [NotNull] PropertyInfo navigationProperty,
+            [CanBeNull] PropertyInfo inverseProperty,
+            ConfigurationSource configurationSource)
+            => Owns(
+                new TypeIdentity(targetEntityType),
+                PropertyIdentity.Create(navigationProperty),
+                PropertyIdentity.Create(inverseProperty),
+                configurationSource);
 
         private InternalRelationshipBuilder Owns(
             TypeIdentity targetEntityType,
             PropertyIdentity navigation,
+            PropertyIdentity? inverse,
             ConfigurationSource configurationSource)
         {
-            PropertyIdentity? inverse = null;
             InternalEntityTypeBuilder ownedEntityType;
             InternalRelationshipBuilder relationship;
             using (var batch = Metadata.Model.ConventionDispatcher.StartBatch())
