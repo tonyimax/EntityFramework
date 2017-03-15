@@ -156,7 +156,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                         .GetTypeInfo()
                         .GetDeclaredMethod(nameof(GroupJoinInclude.WithEntityAccessor));
 
-                var existingGroupJoinIncludeExpression 
+                var existingGroupJoinIncludeExpression
                     = existingGroupJoinIncludeWithAccessor != null
                           && existingGroupJoinIncludeWithAccessor.Method.Equals(withAccessorMethodInfo)
                     ? existingGroupJoinIncludeWithAccessor.Object
@@ -266,18 +266,16 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
 
                     var oldPredicate = selectExpression.Predicate;
 
-                    Dictionary<Type, int []> _;
+                    Dictionary<Type, int[]> _;
                     var materializer
                         = _materializerFactory
                             .CreateMaterializer(
                                 targetEntityType,
                                 selectExpression,
                                 (p, se) => se.AddToProjection(
-                                               new AliasExpression(
-                                                   new ColumnExpression(
-                                                       _relationalAnnotationProvider.For(p).ColumnName,
-                                                       p,
-                                                       joinedTableExpression))) - valueBufferOffset,
+                                    _relationalAnnotationProvider.For(p).ColumnName,
+                                    p,
+                                    joinedTableExpression) - valueBufferOffset,
                                 /*querySource:*/ null,
                                 out _);
 
@@ -396,9 +394,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
 
                         foreach (var ordering in selectExpression.OrderBy)
                         {
-                            // ReSharper disable once PossibleNullReferenceException
-                            var principalKeyProperty
-                                = ((ordering.Expression as AliasExpression)?.Expression as ColumnExpression).Property;
+                            var principalKeyProperty = ordering.Expression.TryGetProperty();
 
                             var referencedForeignKeyProperty = pkPropertiesToFkPropertiesMap[principalKeyProperty];
 
@@ -413,11 +409,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                     else
                     {
                         var innerJoinSelectExpression
-                            = selectExpression.Clone(
-                                selectExpression.OrderBy
-                                    .Select(o => o.Expression)
-                                    .Last(o => o.IsAliasWithColumnExpression())
-                                    .TryGetColumnExpression().TableAlias);
+                            = selectExpression.Clone(principalTable.Alias);
 
                         innerJoinSelectExpression.ClearProjection();
 
@@ -492,9 +484,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
         {
             var needOrderingChanges
                 = innerJoinSelectExpression.OrderBy
-                    .Any(x => x.Expression is SelectExpression
-                              || x.Expression.IsAliasWithColumnExpression()
-                              || x.Expression.IsAliasWithSelectExpression());
+                    .Any(x => x.Expression is SelectExpression);
 
             var orderings = innerJoinSelectExpression.OrderBy.ToList();
             if (needOrderingChanges)
@@ -506,45 +496,39 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
             {
                 var orderingExpression = ordering.Expression;
 
-                var aliasExpression = ordering.Expression as AliasExpression;
+                var index = innerJoinSelectExpression.AddToProjection(orderingExpression);
 
-                if (aliasExpression?.Alias != null)
+                var innerExpression = innerJoinSelectExpression.Projection[index];
+
+                Expression boundExpression;
+                if (innerExpression is ColumnExpression ce)
                 {
-                    var columnExpression = aliasExpression.TryGetColumnExpression();
-                    if (columnExpression != null)
-                    {
-                        orderingExpression
-                            = new ColumnExpression(
-                                aliasExpression.Alias,
-                                columnExpression.Property,
-                                columnExpression.Table);
-                    }
+                    boundExpression = new ColumnReferenceExpression(ce, innerJoinExpression);
                 }
-
-                var index = orderingExpression is ColumnExpression || orderingExpression.IsAliasWithColumnExpression()
-                    ? innerJoinSelectExpression.AddToProjection(orderingExpression)
-                    : innerJoinSelectExpression.AddToProjection(
-                        new AliasExpression(
-                            innerJoinSelectExpression.Alias + "_" + innerJoinSelectExpression.Projection.Count,
-                            orderingExpression));
-
-                var expression = innerJoinSelectExpression.Projection[index];
+                else if (innerExpression is AliasExpression ae)
+                {
+                    boundExpression = new ColumnReferenceExpression(ae, innerJoinExpression);
+                }
+                else if (innerExpression is ColumnReferenceExpression cre)
+                {
+                    boundExpression = new ColumnReferenceExpression(cre, innerJoinExpression);
+                }
+                else
+                {
+                    boundExpression = new ColumnReferenceExpression(new AliasExpression(innerExpression), innerJoinExpression);
+                }
 
                 if (needOrderingChanges)
                 {
-                    innerJoinSelectExpression.AddToOrderBy(new Ordering(expression.TryGetColumnExpression() ?? expression, ordering.OrderingDirection));
+                    // TODO: This can be removed if AddToProjection also updates the ordering expressions added if the expression is the same
+                    innerJoinSelectExpression.AddToOrderBy(new Ordering(innerExpression, ordering.OrderingDirection));
                 }
 
-                var projectedAliasExpression = expression as AliasExpression;
-                var newExpression = projectedAliasExpression?.Alias != null
-                    ? new ColumnExpression(projectedAliasExpression.Alias, projectedAliasExpression.Type, innerJoinExpression)
-                    : targetSelectExpression.UpdateColumnExpression(expression, innerJoinExpression);
-
-                targetSelectExpression.AddToOrderBy(new Ordering(newExpression, ordering.OrderingDirection));
+                targetSelectExpression.AddToOrderBy(new Ordering(boundExpression, ordering.OrderingDirection));
             }
 
-            if ((innerJoinSelectExpression.Limit == null)
-                && (innerJoinSelectExpression.Offset == null))
+            if (innerJoinSelectExpression.Limit == null
+                && innerJoinSelectExpression.Offset == null)
             {
                 innerJoinSelectExpression.ClearOrderBy();
             }
@@ -620,21 +604,16 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                     tableExpression);
             }
 
-            var aliasExpressions
+            var candidates
                 = projections
-                    .OfType<AliasExpression>()
-                    .Where(p => p.TryGetColumnExpression()?.Property == property)
+                    .Where(p => p.TryGetProperty() == property)
                     .ToList();
 
-            var aliasExpression
-                = aliasExpressions.Count == 1
-                    ? aliasExpressions[0]
-                    : aliasExpressions.Last(ae => ae.TryGetColumnExpression().Table.QuerySource == querySource);
-
-            return new ColumnExpression(
-                aliasExpression.Alias ?? aliasExpression.TryGetColumnExpression().Name,
-                property,
-                tableExpression);
+            if (candidates.Count == 1)
+            {
+                return candidates[0].TryBindColumnReferenceExpression(tableExpression);
+            }
+            return candidates.First(c => c.TryGetQuerySource() == querySource).TryBindColumnReferenceExpression(tableExpression);
         }
 
         private static IEnumerable<Expression> ExtractProjections(TableExpressionBase tableExpression)
@@ -659,7 +638,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
         private static bool IsOrderingOnNonPrincipalKeyProperties(
                 IEnumerable<Ordering> orderings, IReadOnlyList<IProperty> properties)
             => orderings
-                .Select(ordering => ((ordering.Expression as AliasExpression)?.Expression as ColumnExpression)?.Property)
-                .Any(property => !properties.Contains(property));
+                .Select(ordering => ordering.Expression.TryGetProperty())
+                .Any(property => property == null || !properties.Contains(property));
     }
 }

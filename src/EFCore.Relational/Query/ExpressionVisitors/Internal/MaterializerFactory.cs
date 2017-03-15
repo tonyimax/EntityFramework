@@ -88,8 +88,8 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
 
             var discriminatorColumn
                 = selectExpression.Projection
-                    .OfType<AliasExpression>()
-                    .Last(c => c.TryGetColumnExpression()?.Property == discriminatorProperty);
+                    .OfType<ColumnExpression>()
+                    .Last(c => c.Property == discriminatorProperty);
 
             var firstDiscriminatorValue
                 = Expression.Constant(

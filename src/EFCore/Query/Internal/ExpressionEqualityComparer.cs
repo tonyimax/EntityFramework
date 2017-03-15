@@ -380,6 +380,8 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                         return CompareMemberInit((MemberInitExpression)a, (MemberInitExpression)b);
                     case ExpressionType.ListInit:
                         return CompareListInit((ListInitExpression)a, (ListInitExpression)b);
+                    //case ExpressionType.Extension:
+                    //    return a.Equals(b);
                     default:
                         throw new NotImplementedException();
                 }

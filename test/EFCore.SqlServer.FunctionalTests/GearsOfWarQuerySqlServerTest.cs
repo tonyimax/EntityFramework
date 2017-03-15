@@ -16,7 +16,7 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests
         public GearsOfWarQuerySqlServerTest(GearsOfWarQuerySqlServerFixture fixture, ITestOutputHelper testOutputHelper)
             : base(fixture)
         {
-            //TestSqlLoggerFactory.CaptureOutput(testOutputHelper);
+            TestSqlLoggerFactory.CaptureOutput(testOutputHelper);
         }
 
         public override void Entity_equality_empty()
@@ -1688,7 +1688,7 @@ ORDER BY [w].[OwnerFullName]",
             Assert.Equal(
                 @"SELECT [w].[Id], [w].[AmmunitionType], [w].[IsAutomatic], [w].[Name], [w].[OwnerFullName], [w].[SynergyWithId]
 FROM [Weapon] AS [w]
-WHERE COALESCE([w].[IsAutomatic], 0) = 1",
+WHERE (COALESCE([w].[IsAutomatic], 0)) = 1",
                 Sql);
         }
 
@@ -1709,7 +1709,7 @@ WHERE ([w].[AmmunitionType] = 1) AND (COALESCE([w].[IsAutomatic], 0) = 1)",
 
             Assert.Equal(
                 @"SELECT CASE
-    WHEN ([w].[AmmunitionType] = 1) AND (COALESCE([w].[IsAutomatic], 0) = 1)
+    WHEN ([w].[AmmunitionType] = 1) AND ((COALESCE([w].[IsAutomatic], 0)) = 1)
     THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT)
 END
 FROM [Weapon] AS [w]",

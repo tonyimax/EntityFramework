@@ -1,6 +1,7 @@
 // Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System;
 using System.Linq;
 using System.Linq.Expressions;
 using JetBrains.Annotations;
@@ -97,29 +98,22 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
 
                 foreach (var projection in subQuery.Projection)
                 {
-                    var alias = projection as AliasExpression;
-                    var column = projection as ColumnExpression;
-
-                    if (column != null)
+                    Expression expressionToAdd;
+                    if (projection is ColumnExpression ce)
                     {
-                        column = new ColumnExpression(column.Name, column.Property, subQuery);
-                        selectExpression.AddToProjection(column);
-                        continue;
-                    }
-
-                    column = alias?.TryGetColumnExpression();
-
-                    if (column != null)
+                        expressionToAdd = new ColumnReferenceExpression(ce, subQuery);
+                    } else if (projection is AliasExpression ae)
                     {
-                        column = new ColumnExpression(alias.Alias ?? column.Name, column.Property, subQuery);
-                        alias = new AliasExpression(alias.Alias, column);
-                        selectExpression.AddToProjection(alias);
+                        expressionToAdd = new ColumnReferenceExpression(ae, subQuery);
+                    } else if (projection is ColumnReferenceExpression cre)
+                    {
+                        expressionToAdd = new ColumnReferenceExpression(cre, subQuery);
                     }
                     else
                     {
-                        column = new ColumnExpression(alias?.Alias, alias.Expression.Type, subQuery);
-                        selectExpression.AddToProjection(column);
+                        throw new InvalidOperationException("Subquery will never have any other type of expression.");
                     }
+                    selectExpression.AddToProjection(expressionToAdd);
                 }
 
                 if (subQuery.OrderBy.Count == 0)
@@ -128,18 +122,23 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                         new Ordering(new SqlFunctionExpression("@@RowCount", typeof(int)), OrderingDirection.Asc));
                 }
 
-                var columnExpression = new ColumnExpression(RowNumberColumnName, typeof(int), subQuery);
-                var rowNumber = new RowNumberExpression(columnExpression, subQuery.OrderBy);
+                var rowNumberExpression
+                    = new AliasExpression(
+                        RowNumberColumnName,
+                        new RowNumberExpression(subQuery.OrderBy));
+                var columnReferenceExpression
+                    = new ColumnReferenceExpression(rowNumberExpression, subQuery);
 
                 subQuery.ClearOrderBy();
-                subQuery.AddToProjection(rowNumber, false);
+                subQuery.AddToProjection(rowNumberExpression, resetProjectStar: false);
 
                 var offset = subQuery.Offset ?? Expression.Constant(0);
 
                 if (subQuery.Offset != null)
                 {
                     selectExpression.AddToPredicate
-                        (Expression.GreaterThan(columnExpression, offset));
+                        (Expression.GreaterThan(columnReferenceExpression, offset));
+                    subQuery.Offset = null;
                 }
 
                 if (subQuery.Limit != null)
@@ -154,7 +153,9 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                             : Expression.Add(offset, subQuery.Limit);
 
                     selectExpression.AddToPredicate(
-                        Expression.LessThanOrEqual(columnExpression, limitExpression));
+                        Expression.LessThanOrEqual(columnReferenceExpression, limitExpression));
+
+                    subQuery.Limit = null;
                 }
 
                 if (selectExpression.Alias != null)

@@ -298,27 +298,21 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
 
                         foreach (var property in entityType.FindPrimaryKey().Properties)
                         {
-                            itemSelectExpression.AddToProjection(
-                                new ColumnExpression(
+                            var itemExpression = itemSelectExpression.BindPropertyToSelectExpression(
                                     property.Name,
                                     property,
-                                    itemSelectExpression.Tables.First()));
+                                    itemSelectExpression.Tables.First());
 
-                            collectionSelectExpression.AddToProjection(
-                                new ColumnExpression(
-                                    property.Name,
-                                    property,
-                                    collectionSelectExpression.Tables.First()));
+                            itemSelectExpression.AddToProjection(itemExpression);
 
-                            var predicate = Expression.Equal(
-                                new ColumnExpression(
+                            var collectionExpression = collectionSelectExpression.BindPropertyToSelectExpression(
                                     property.Name,
                                     property,
-                                    collectionSelectExpression),
-                                new ColumnExpression(
-                                    property.Name,
-                                    property,
-                                    itemSelectExpression));
+                                    collectionSelectExpression.Tables.First());
+
+                            collectionSelectExpression.AddToProjection(collectionExpression);
+
+                            var predicate = Expression.Equal(collectionExpression.TryBindColumnReferenceExpression(collectionSelectExpression), itemExpression.TryBindColumnReferenceExpression(itemSelectExpression));
 
                             joinExpression.Predicate
                                 = joinExpression.Predicate == null

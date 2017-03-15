@@ -293,10 +293,10 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors
                     .For(concreteEntityTypes[0]).DiscriminatorProperty;
 
             var discriminatorColumn
-                = new ColumnExpression(
+                = selectExpression.BindPropertyToSelectExpression(
                     _relationalAnnotationProvider.For(discriminatorProperty).ColumnName,
                     discriminatorProperty,
-                    selectExpression.GetTableForQuerySource(querySource));
+                    querySource);
 
             var firstDiscriminatorValue
                 = Expression.Constant(

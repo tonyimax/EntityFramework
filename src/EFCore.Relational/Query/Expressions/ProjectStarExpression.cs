@@ -4,7 +4,6 @@
 using System;
 using System.Linq.Expressions;
 using JetBrains.Annotations;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query.Sql;
 using Microsoft.EntityFrameworkCore.Utilities;
 
@@ -13,28 +12,18 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
     /// <summary>
     ///     A column expression.
     /// </summary>
-    public class ColumnExpression : Expression
+    public class ProjectStarExpression : Expression
     {
-        private readonly IProperty _property;
         private readonly TableExpressionBase _tableExpression;
 
         /// <summary>
         ///     Creates a new instance of a ColumnExpression.
         /// </summary>
-        /// <param name="name"> The column name. </param>
-        /// <param name="property"> The corresponding property. </param>
         /// <param name="tableExpression"> The target table expression. </param>
-        public ColumnExpression(
-            [NotNull] string name,
-            [NotNull] IProperty property,
-            [NotNull] TableExpressionBase tableExpression)
+        public ProjectStarExpression([NotNull] TableExpressionBase tableExpression)
         {
-            Check.NotNull(name, nameof(name));
-            Check.NotNull(property, nameof(property));
             Check.NotNull(tableExpression, nameof(tableExpression));
 
-            Name = name;
-            _property = property;
             _tableExpression = tableExpression;
         }
 
@@ -48,33 +37,17 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         /// </summary>
         public virtual string TableAlias => _tableExpression.Alias;
 
-#pragma warning disable 108
-
         /// <summary>
-        ///     The corresponding property.
+        ///     Gets the static type of the expression that this <see cref="Expression" /> represents. (Inherited from <see cref="Expression" />.)
         /// </summary>
-        public virtual IProperty Property => _property;
-#pragma warning restore 108
-
-        /// <summary>
-        ///     Gets the column name.
-        /// </summary>
-        /// <value>
-        ///     The column name.
-        /// </value>
-        public virtual string Name { get; }
+        /// <returns> The <see cref="Type" /> that represents the static type of the expression. </returns>
+        public override Type Type => typeof(object);
 
         /// <summary>
         ///     Returns the node type of this <see cref="Expression" />. (Inherited from <see cref="Expression" />.)
         /// </summary>
         /// <returns> The <see cref="ExpressionType" /> that represents this expression. </returns>
         public override ExpressionType NodeType => ExpressionType.Extension;
-
-        /// <summary>
-        ///     Gets the static type of the expression that this <see cref="Expression" /> represents. (Inherited from <see cref="Expression" />.)
-        /// </summary>
-        /// <returns> The <see cref="Type" /> that represents the static type of the expression. </returns>
-        public override Type Type => Property.ClrType;
 
         /// <summary>
         ///     Dispatches to the specific visit method for this node type.
@@ -86,7 +59,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             var specificVisitor = visitor as ISqlExpressionVisitor;
 
             return specificVisitor != null
-                ? specificVisitor.VisitColumn(this)
+                ? specificVisitor.VisitProjectStar(this)
                 : base.Accept(visitor);
         }
 
@@ -105,55 +78,23 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         /// </remarks>
         protected override Expression VisitChildren(ExpressionVisitor visitor) => this;
 
-        private bool Equals([NotNull] ColumnExpression other)
-            => (Name == other.Name
-                || (_property != null && _property.Equals(other._property)))
-               && Type == other.Type
-            // TODO: ALIAS HACK
-               && _tableExpression.Alias.Equals(other._tableExpression.Alias);
+        protected bool Equals(ProjectStarExpression other) => _tableExpression.Alias.Equals(other._tableExpression.Alias);
 
-        /// <summary>
-        ///     Tests if this object is considered equal to another.
-        /// </summary>
-        /// <param name="obj"> The object to compare with the current object. </param>
-        /// <returns>
-        ///     true if the objects are considered equal, false if they are not.
-        /// </returns>
         public override bool Equals(object obj)
         {
             if (ReferenceEquals(null, obj))
-            {
                 return false;
-            }
-
             if (ReferenceEquals(this, obj))
-            {
                 return true;
-            }
-
-            return (obj.GetType() == GetType())
-                   && Equals((ColumnExpression)obj);
+            return obj.GetType() == this.GetType() && Equals((ProjectStarExpression)obj);
         }
 
-        /// <summary>
-        ///     Returns a hash code for this object.
-        /// </summary>
-        /// <returns>
-        ///     A hash code for this object.
-        /// </returns>
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                return (_property.GetHashCode() * 397)
-                       ^ _tableExpression.GetHashCode();
-            }
-        }
+        public override int GetHashCode() => _tableExpression.GetHashCode();
 
         /// <summary>
         ///     Creates a <see cref="String" /> representation of the Expression.
         /// </summary>
         /// <returns>A <see cref="String" /> representation of the Expression.</returns>
-        public override string ToString() => _tableExpression.Alias + "." + Name;
+        public override string ToString() => _tableExpression.Alias + ".*";
     }
 }

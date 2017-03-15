@@ -72,28 +72,22 @@ namespace Microsoft.EntityFrameworkCore.Query.Sql.Internal
 
             for (var i = 0; i < SelectExpression.Projection.Count; i++)
             {
-                var aliasExpression = SelectExpression.Projection[i] as AliasExpression;
-
-                if (aliasExpression != null)
+                // Property projections directly from table is always ColumnExpressions
+                if (SelectExpression.Projection[i] is ColumnExpression columnExpression)
                 {
-                    var columnName
-                        = aliasExpression.Alias
-                          ?? aliasExpression.TryGetColumnExpression()?.Name;
+                    var columnName = columnExpression.Name;
 
-                    if (columnName != null)
+                    var readerColumn
+                        = readerColumns.SingleOrDefault(c =>
+                            string.Equals(columnName, c.Name, StringComparison.OrdinalIgnoreCase));
+
+                    if (readerColumn == null)
                     {
-                        var readerColumn
-                            = readerColumns.SingleOrDefault(c =>
-                                string.Equals(columnName, c.Name, StringComparison.OrdinalIgnoreCase));
-
-                        if (readerColumn == null)
-                        {
-                            throw new InvalidOperationException(RelationalStrings.FromSqlMissingColumn(columnName));
-                        }
-
-                        types[i] = SelectExpression.Projection[i].Type;
-                        indexMap[i] = readerColumn.Ordinal;
+                        throw new InvalidOperationException(RelationalStrings.FromSqlMissingColumn(columnName));
                     }
+
+                    types[i] = SelectExpression.Projection[i].Type;
+                    indexMap[i] = readerColumn.Ordinal;
                 }
             }
 

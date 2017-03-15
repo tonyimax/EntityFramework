@@ -4398,7 +4398,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
                 entryCount: 91);
         }
 
-        [ConditionalFact]
+        [ConditionalFact(Skip = "Anonymous types are non-transparent atm.")]
         public virtual void Distinct_OrderBy3()
         {
             AssertQuery<Customer>(
@@ -5979,7 +5979,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
                 cs => cs.Select(c => new { c.CustomerID, c.CompanyName, Region = c.Region ?? "ZZ" }).OrderBy(c => c.Region).Take(5));
         }
 
-        [ConditionalFact(Skip = "The order by inside subquery needs to be aliased to be copied outside. Invalid query generated otherwise.")]
+        [ConditionalFact]
         public virtual void Select_take_skip_null_coalesce_operator()
         {
             AssertQuery<Customer>(

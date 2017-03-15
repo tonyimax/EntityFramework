@@ -1159,6 +1159,34 @@ namespace Microsoft.EntityFrameworkCore.Query.Sql
         }
 
         /// <summary>
+        ///     Visits a ColumnReferenceExpression.
+        /// </summary>
+        /// <param name="columnReferenceExpression"> The column reference expression. </param>
+        /// <returns>
+        ///     An Expression.
+        /// </returns>
+        public Expression VisitColumnReference(ColumnReferenceExpression columnReferenceExpression)
+        {
+            Check.NotNull(columnReferenceExpression, nameof(columnReferenceExpression));
+
+            _relationalCommandBuilder.Append(SqlGenerator.DelimitIdentifier(columnReferenceExpression.TableAlias))
+                .Append(".")
+                .Append(SqlGenerator.DelimitIdentifier(columnReferenceExpression.Name));
+
+            return columnReferenceExpression;
+        }
+
+        public Expression VisitProjectStar(ProjectStarExpression projectStarExpression)
+        {
+            Check.NotNull(projectStarExpression, nameof(projectStarExpression));
+
+            _relationalCommandBuilder.Append(SqlGenerator.DelimitIdentifier(projectStarExpression.Table.Alias))
+                .Append(".*");
+
+            return projectStarExpression;
+        }
+
+        /// <summary>
         ///     Visits an AliasExpression.
         /// </summary>
         /// <param name="aliasExpression"> The alias expression. </param>
@@ -1551,65 +1579,81 @@ namespace Microsoft.EntityFrameworkCore.Query.Sql
                 _parameterValues = parameterValues;
             }
 
-            protected override Expression VisitBinary(BinaryExpression expression)
+            protected override Expression VisitBinary(BinaryExpression binaryExpression)
             {
-                if (expression.NodeType == ExpressionType.Equal
-                    || expression.NodeType == ExpressionType.NotEqual)
+                if (binaryExpression.NodeType == ExpressionType.Equal
+                    || binaryExpression.NodeType == ExpressionType.NotEqual)
                 {
-                    var leftExpression = expression.Left.RemoveConvert();
-                    var rightExpression = expression.Right.RemoveConvert();
+                    var leftExpression = binaryExpression.Left.RemoveConvert();
+                    var rightExpression = binaryExpression.Right.RemoveConvert();
 
-                    var parameter
-                        = rightExpression as ParameterExpression
-                          ?? leftExpression as ParameterExpression;
+                    var isLeftParameter = leftExpression is ParameterExpression;
+                    var isRightParameter = rightExpression is ParameterExpression;
 
-                    object parameterValue;
-                    if (parameter != null
-                        && _parameterValues.TryGetValue(parameter.Name, out parameterValue))
+                    if (isLeftParameter || isRightParameter)
                     {
-                        if (parameterValue == null)
+                        var parameter = (ParameterExpression)(isLeftParameter ? leftExpression : rightExpression);
+
+                        if (_parameterValues.TryGetValue(parameter.Name, out object parameterValue))
                         {
-                            var columnExpression
-                                = leftExpression.TryGetColumnExpression()
-                                  ?? rightExpression.TryGetColumnExpression();
+                            var otherExpression = isLeftParameter ? rightExpression : leftExpression;
 
-                            if (columnExpression != null)
+                            if (otherExpression is ConstantExpression constantExpression)
                             {
-                                return
-                                    expression.NodeType == ExpressionType.Equal
-                                        ? (Expression)new IsNullExpression(columnExpression)
-                                        : Expression.Not(new IsNullExpression(columnExpression));
-                            }
-                        }
+                                if (parameterValue == null
+                                    && constantExpression.Value == null)
+                                {
+                                    return
+                                        binaryExpression.NodeType == ExpressionType.Equal
+                                            ? Expression.Constant(true)
+                                            : Expression.Constant(false);
+                                }
 
-                        var constantExpression
-                            = leftExpression as ConstantExpression
-                              ?? rightExpression as ConstantExpression;
-
-                        if (constantExpression != null)
-                        {
-                            if (parameterValue == null
-                                && constantExpression.Value == null)
-                            {
-                                return
-                                    expression.NodeType == ExpressionType.Equal
-                                        ? Expression.Constant(true)
-                                        : Expression.Constant(false);
+                                if (parameterValue == null && constantExpression.Value != null
+                                    || parameterValue != null && constantExpression.Value == null)
+                                {
+                                    return
+                                        binaryExpression.NodeType == ExpressionType.Equal
+                                            ? Expression.Constant(false)
+                                            : Expression.Constant(true);
+                                }
                             }
 
-                            if (parameterValue == null && constantExpression.Value != null
-                                || parameterValue != null && constantExpression.Value == null)
+                            if (parameterValue == null)
                             {
-                                return
-                                    expression.NodeType == ExpressionType.Equal
-                                        ? Expression.Constant(false)
-                                        : Expression.Constant(true);
+                                    return
+                                        binaryExpression.NodeType == ExpressionType.Equal
+                                            ? (Expression)new IsNullExpression(otherExpression)
+                                            : Expression.Not(new IsNullExpression(otherExpression));
                             }
                         }
                     }
                 }
 
-                return base.VisitBinary(expression);
+                return base.VisitBinary(binaryExpression);
+            }
+
+            protected override Expression VisitExtension(Expression extensionExpression)
+            {
+                if (extensionExpression is IsNullExpression isNullExpression)
+                {
+                    if (isNullExpression.Operand is ParameterExpression parameter)
+                    {
+                        if (_parameterValues.TryGetValue(parameter.Name, out object parameterValue))
+                        {
+                            if (parameterValue == null)
+                            {
+                                return Expression.Constant(true, extensionExpression.Type);
+                            }
+                            else
+                            {
+                                return Expression.Constant(false, extensionExpression.Type);
+                            }
+                        }
+                    }
+                }
+
+                return base.VisitExtension(extensionExpression);
             }
         }
 

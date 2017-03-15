@@ -787,7 +787,7 @@ WHERE ((([e].[NullableStringB] IS NOT NULL AND (([e].[NullableStringA] <> N'Foo'
             Assert.Equal(
                 @"SELECT [e].[Id]
 FROM [NullSemanticsEntity1] AS [e]
-WHERE COALESCE([e].[NullableBoolA], 1) = 1",
+WHERE (COALESCE([e].[NullableBoolA], 1)) = 1",
                 Sql);
         }
 
@@ -820,7 +820,7 @@ WHERE [e].[NullableStringA] IS NOT NULL",
             Assert.Equal(
                 @"SELECT [e].[Id]
 FROM [NullSemanticsEntity1] AS [e]
-WHERE (COALESCE([e].[NullableStringA], [e].[NullableStringB]) = [e].[NullableStringC]) OR (([e].[NullableStringA] IS NULL AND [e].[NullableStringB] IS NULL) AND [e].[NullableStringC] IS NULL)",
+WHERE ((COALESCE([e].[NullableStringA], [e].[NullableStringB])) = [e].[NullableStringC]) OR (([e].[NullableStringA] IS NULL AND [e].[NullableStringB] IS NULL) AND [e].[NullableStringC] IS NULL)",
                 Sql);
         }
 
@@ -831,7 +831,7 @@ WHERE (COALESCE([e].[NullableStringA], [e].[NullableStringB]) = [e].[NullableStr
             Assert.Equal(
                 @"SELECT [e].[Id]
 FROM [NullSemanticsEntity1] AS [e]
-WHERE ((COALESCE([e].[NullableStringA], [e].[NullableStringB]) <> [e].[NullableStringC]) OR (([e].[NullableStringA] IS NULL AND [e].[NullableStringB] IS NULL) OR [e].[NullableStringC] IS NULL)) AND (([e].[NullableStringA] IS NOT NULL OR [e].[NullableStringB] IS NOT NULL) OR [e].[NullableStringC] IS NOT NULL)",
+WHERE (((COALESCE([e].[NullableStringA], [e].[NullableStringB])) <> [e].[NullableStringC]) OR (([e].[NullableStringA] IS NULL AND [e].[NullableStringB] IS NULL) OR [e].[NullableStringC] IS NULL)) AND (([e].[NullableStringA] IS NOT NULL OR [e].[NullableStringB] IS NOT NULL) OR [e].[NullableStringC] IS NOT NULL)",
                 Sql);
         }
 
@@ -842,7 +842,7 @@ WHERE ((COALESCE([e].[NullableStringA], [e].[NullableStringB]) <> [e].[NullableS
             Assert.Equal(
                 @"SELECT [e].[Id]
 FROM [NullSemanticsEntity1] AS [e]
-WHERE COALESCE([e].[NullableStringA], [e].[NullableStringB]) = COALESCE([e].[StringA], [e].[StringB])",
+WHERE (COALESCE([e].[NullableStringA], [e].[NullableStringB])) = (COALESCE([e].[StringA], [e].[StringB]))",
                 Sql);
         }
 
@@ -853,7 +853,7 @@ WHERE COALESCE([e].[NullableStringA], [e].[NullableStringB]) = COALESCE([e].[Str
             Assert.Equal(
                 @"SELECT [e].[Id]
 FROM [NullSemanticsEntity1] AS [e]
-WHERE ((COALESCE([e].[NullableIntA], [e].[NullableIntB]) <> COALESCE([e].[NullableIntC], [e].[NullableIntB])) OR (([e].[NullableIntA] IS NULL AND [e].[NullableIntB] IS NULL) OR ([e].[NullableIntC] IS NULL AND [e].[NullableIntB] IS NULL))) AND (([e].[NullableIntA] IS NOT NULL OR [e].[NullableIntB] IS NOT NULL) OR ([e].[NullableIntC] IS NOT NULL OR [e].[NullableIntB] IS NOT NULL))",
+WHERE (((COALESCE([e].[NullableIntA], [e].[NullableIntB])) <> (COALESCE([e].[NullableIntC], [e].[NullableIntB]))) OR (([e].[NullableIntA] IS NULL AND [e].[NullableIntB] IS NULL) OR ([e].[NullableIntC] IS NULL AND [e].[NullableIntB] IS NULL))) AND (([e].[NullableIntA] IS NOT NULL OR [e].[NullableIntB] IS NOT NULL) OR ([e].[NullableIntC] IS NOT NULL OR [e].[NullableIntB] IS NOT NULL))",
                 Sql);
         }
 

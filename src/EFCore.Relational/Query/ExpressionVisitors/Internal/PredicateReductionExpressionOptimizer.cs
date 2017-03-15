@@ -105,5 +105,19 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
 
             return unaryExpression?.Operand is NullableExpression;
         }
+
+        protected override Expression VisitUnary(UnaryExpression node)
+        {
+            if (node.NodeType == ExpressionType.Not)
+            {
+                if (node.Operand is ConstantExpression constantExpression
+                    && constantExpression.Type.UnwrapNullableType() == typeof(bool))
+                {
+                    return Expression.Constant(!(bool)constantExpression.Value, node.Type);
+                }
+            }
+
+            return base.VisitUnary(node);
+        }
     }
 }

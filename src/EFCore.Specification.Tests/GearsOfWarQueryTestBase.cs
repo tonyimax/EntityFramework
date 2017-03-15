@@ -1192,7 +1192,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
                             select new KeyValuePair<Guid, Guid>(ct1.Id, ct2.Id)).ToList();
             }
 
-            ClearLog();
+            //ClearLog();
 
             using (var context = CreateContext())
             {
