@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Linq;
 using System.Linq.Expressions;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore.Utilities;
@@ -149,6 +150,72 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions.Internal
         ///     A textual representation of the <see cref="T:System.Linq.Expressions.Expression" />.
         /// </returns>
         public override string ToString()
-            => $"(?{AccessOperation}?)"; // TODO: Improve this
+        {
+            if (AccessOperation is MemberExpression memberExpression)
+            {
+                return Caller + "?." + memberExpression.Member.Name;
+            }
+
+            if (AccessOperation is MethodCallExpression methodCallExpression)
+            {
+                if (methodCallExpression.Object != null)
+                {
+                    return methodCallExpression.Object
+                        + "?." + methodCallExpression.Method.Name
+                        + "(" + string.Join(",", methodCallExpression.Arguments) + ")";
+                }
+                var method = methodCallExpression.Method;
+                return method.DeclaringType?.Name + "." + method.Name
+                    + "(?" + methodCallExpression.Arguments[0] + "?, "
+                    + string.Join(",", methodCallExpression.Arguments.Skip(1)) + ")";
+            }
+
+            return "?" + AccessOperation + "?";
+        }
+
+        /// <summary>
+        ///     Tests if this object is considered equal to another.
+        /// </summary>
+        /// <param name="obj"> The object to compare with the current object. </param>
+        /// <returns>
+        ///     true if the objects are considered equal, false if they are not.
+        /// </returns>
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj))
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(this, obj))
+            {
+                return true;
+            }
+
+            return obj.GetType() == GetType() && Equals((NullConditionalExpression)obj);
+        }
+
+        private bool Equals(NullConditionalExpression other)
+        {
+            return _type == other._type && NullableCaller.Equals(other.NullableCaller) && Caller.Equals(other.Caller) && AccessOperation.Equals(other.AccessOperation);
+        }
+
+        /// <summary>
+        ///     Returns a hash code for this object.
+        /// </summary>
+        /// <returns>
+        ///     A hash code for this object.
+        /// </returns>
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                var hashCode = _type.GetHashCode();
+                hashCode = (hashCode * 397) ^ NullableCaller.GetHashCode();
+                hashCode = (hashCode * 397) ^ Caller.GetHashCode();
+                hashCode = (hashCode * 397) ^ AccessOperation.GetHashCode();
+                return hashCode;
+            }
+        }
     }
 }

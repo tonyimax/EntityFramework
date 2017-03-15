@@ -1,6 +1,7 @@
 // Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System;
 using System.Linq;
 using System.Linq.Expressions;
 using JetBrains.Annotations;
@@ -48,18 +49,16 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
             {
                 var visitor = new RowNumberPagingExpressionVisitor();
 
-                SelectExpression mainSelectExpression;
-                if (QueriesBySource.TryGetValue(queryModel.MainFromClause, out mainSelectExpression))
+                if (QueriesBySource.TryGetValue(queryModel.MainFromClause, out SelectExpression mainSelectExpression))
                 {
                     visitor.Visit(mainSelectExpression);
                 }
 
                 foreach (var additionalSource in queryModel.BodyClauses.OfType<IQuerySource>())
                 {
-                    SelectExpression additionalFromExpression;
-                    if (QueriesBySource.TryGetValue(additionalSource, out additionalFromExpression))
+                    if (QueriesBySource.TryGetValue(additionalSource, out SelectExpression additionalFromExpression))
                     {
-                        visitor.Visit(mainSelectExpression);
+                        visitor.Visit(additionalFromExpression);
                     }
                 }
             }
@@ -69,15 +68,12 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
         {
             public override Expression Visit(Expression node)
             {
-                var existsExpression = node as ExistsExpression;
-                if (existsExpression != null)
+                if (node is ExistsExpression existsExpression)
                 {
                     return VisitExistExpression(existsExpression);
                 }
 
-                var selectExpression = node as SelectExpression;
-
-                return selectExpression != null ? VisitSelectExpression(selectExpression) : base.Visit(node);
+                return node is SelectExpression selectExpression ? VisitSelectExpression(selectExpression) : base.Visit(node);
             }
 
             private static bool RequiresRowNumberPaging(SelectExpression selectExpression)
@@ -97,28 +93,15 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
 
                 foreach (var projection in subQuery.Projection)
                 {
-                    var alias = projection as AliasExpression;
-                    var column = projection as ColumnExpression;
+                    var columnReference = projection.LiftExpressionFromSubquery(subQuery);
 
-                    if (column != null)
+                    if (columnReference != null)
                     {
-                        column = new ColumnExpression(column.Name, column.Property, subQuery);
-                        selectExpression.AddToProjection(column);
-                        continue;
-                    }
-
-                    column = alias?.TryGetColumnExpression();
-
-                    if (column != null)
-                    {
-                        column = new ColumnExpression(alias.Alias ?? column.Name, column.Property, subQuery);
-                        alias = new AliasExpression(alias.Alias, column);
-                        selectExpression.AddToProjection(alias);
+                        selectExpression.AddToProjection(columnReference);
                     }
                     else
                     {
-                        column = new ColumnExpression(alias?.Alias, alias.Expression.Type, subQuery);
-                        selectExpression.AddToProjection(column);
+                        throw new Exception("Subquery should not have any other type of expression.");
                     }
                 }
 
@@ -128,18 +111,23 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                         new Ordering(new SqlFunctionExpression("@@RowCount", typeof(int)), OrderingDirection.Asc));
                 }
 
-                var columnExpression = new ColumnExpression(RowNumberColumnName, typeof(int), subQuery);
-                var rowNumber = new RowNumberExpression(columnExpression, subQuery.OrderBy);
+                var innerRowNumberExpression = new AliasExpression(
+                    RowNumberColumnName,
+                    new RowNumberExpression(subQuery.OrderBy));
 
                 subQuery.ClearOrderBy();
-                subQuery.AddToProjection(rowNumber, false);
+                subQuery.AddToProjection(innerRowNumberExpression, resetProjectStar: false);
+
+                var rowNumberReferenceExpression = new ColumnReferenceExpression(innerRowNumberExpression, subQuery);
 
                 var offset = subQuery.Offset ?? Expression.Constant(0);
 
                 if (subQuery.Offset != null)
                 {
                     selectExpression.AddToPredicate
-                        (Expression.GreaterThan(columnExpression, offset));
+                        (Expression.GreaterThan(rowNumberReferenceExpression, offset));
+
+                    subQuery.Offset = null;
                 }
 
                 if (subQuery.Limit != null)
@@ -154,7 +142,9 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                             : Expression.Add(offset, subQuery.Limit);
 
                     selectExpression.AddToPredicate(
-                        Expression.LessThanOrEqual(columnExpression, limitExpression));
+                        Expression.LessThanOrEqual(rowNumberReferenceExpression, limitExpression));
+
+                    subQuery.Limit = null;
                 }
 
                 if (selectExpression.Alias != null)
@@ -168,9 +158,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
             private Expression VisitExistExpression(ExistsExpression existsExpression)
             {
                 var newExpression = Visit(existsExpression.Expression);
-                var subSelectExpression = newExpression as SelectExpression;
-                if (subSelectExpression != null
-                    && subSelectExpression.Limit == null
+                if (newExpression is SelectExpression subSelectExpression && subSelectExpression.Limit == null
                     && subSelectExpression.Offset == null)
                 {
                     subSelectExpression.ClearOrderBy();

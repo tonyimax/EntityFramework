@@ -956,7 +956,6 @@ FROM [Weapon] AS [w]",
 
         public override void Select_ternary_operation_with_has_value_not_null()
         {
-            // TODO: Optimize this query (See #4267)
             base.Select_ternary_operation_with_has_value_not_null();
 
             AssertSql(
@@ -1693,7 +1692,7 @@ INNER JOIN (
             AssertSql(
                 @"SELECT [w].[Id], [w].[AmmunitionType], [w].[IsAutomatic], [w].[Name], [w].[OwnerFullName], [w].[SynergyWithId]
 FROM [Weapon] AS [w]
-WHERE COALESCE([w].[IsAutomatic], 0) = 1",
+WHERE (COALESCE([w].[IsAutomatic], 0)) = 1",
                 Sql);
         }
 
@@ -1704,7 +1703,7 @@ WHERE COALESCE([w].[IsAutomatic], 0) = 1",
             AssertSql(
                 @"SELECT [w].[Id], [w].[AmmunitionType], [w].[IsAutomatic], [w].[Name], [w].[OwnerFullName], [w].[SynergyWithId]
 FROM [Weapon] AS [w]
-WHERE ([w].[AmmunitionType] = 1) AND (COALESCE([w].[IsAutomatic], 0) = 1)",
+WHERE ([w].[AmmunitionType] = 1) AND ((COALESCE([w].[IsAutomatic], 0)) = 1)",
                 Sql);
         }
 
@@ -1714,7 +1713,7 @@ WHERE ([w].[AmmunitionType] = 1) AND (COALESCE([w].[IsAutomatic], 0) = 1)",
 
             AssertSql(
                 @"SELECT CASE
-    WHEN ([w].[AmmunitionType] = 1) AND (COALESCE([w].[IsAutomatic], 0) = 1)
+    WHEN ([w].[AmmunitionType] = 1) AND ((COALESCE([w].[IsAutomatic], 0)) = 1)
     THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT)
 END
 FROM [Weapon] AS [w]",
@@ -2360,7 +2359,8 @@ LEFT JOIN (
     SELECT [g].*
     FROM [Gear] AS [g]
     WHERE [g].[Discriminator] IN (N'Officer', N'Gear')
-) AS [t0] ON ([t].[GearNickName] = [t0].[Nickname]) AND ([t].[GearSquadId] = [t0].[SquadId])",
+) AS [t0] ON ([t].[GearNickName] = [t0].[Nickname]) AND ([t].[GearSquadId] = [t0].[SquadId])
+ORDER BY [t].[GearNickName], [t].[GearSquadId]",
                 Sql);
         }
 

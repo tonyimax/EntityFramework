@@ -4,37 +4,70 @@
 using System;
 using System.Linq.Expressions;
 using JetBrains.Annotations;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Query.Sql;
 using Microsoft.EntityFrameworkCore.Utilities;
 
 namespace Microsoft.EntityFrameworkCore.Query.Expressions
 {
     /// <summary>
-    ///     A column expression.
+    ///     A column reference expression.
     /// </summary>
-    public class ColumnExpression : Expression
+    public class ColumnReferenceExpression : Expression
     {
-        private readonly IProperty _property;
+        private readonly Expression _expression;
         private readonly TableExpressionBase _tableExpression;
+        private readonly Type _type;
 
         /// <summary>
-        ///     Creates a new instance of a ColumnExpression.
+        ///     Creates a new instance of a ColumnReferenceExpression.
         /// </summary>
-        /// <param name="name"> The column name. </param>
-        /// <param name="property"> The corresponding property. </param>
+        /// <param name="aliasExpression"> The referenced AliasExpression. </param>
         /// <param name="tableExpression"> The target table expression. </param>
-        public ColumnExpression(
-            [NotNull] string name,
-            [NotNull] IProperty property,
+        public ColumnReferenceExpression(
+            [NotNull] AliasExpression aliasExpression,
             [NotNull] TableExpressionBase tableExpression)
+            : this(
+                  Check.NotNull(aliasExpression, nameof(aliasExpression)).Alias,
+                  aliasExpression,
+                  Check.NotNull(tableExpression, nameof(tableExpression)))
         {
-            Check.NotEmpty(name, nameof(name));
-            Check.NotNull(property, nameof(property));
-            Check.NotNull(tableExpression, nameof(tableExpression));
+        }
 
+        /// <summary>
+        ///     Creates a new instance of a ColumnReferenceExpression.
+        /// </summary>
+        /// <param name="columnExpression"> The referenced ColumnExpression. </param>
+        /// <param name="tableExpression"> The target table expression. </param>
+        public ColumnReferenceExpression(
+            [NotNull] ColumnExpression columnExpression,
+            [NotNull] TableExpressionBase tableExpression)
+            : this(
+                  Check.NotNull(columnExpression, nameof(columnExpression)).Name,
+                  columnExpression,
+                  Check.NotNull(tableExpression, nameof(tableExpression)))
+        {
+        }
+
+        /// <summary>
+        ///     Creates a new instance of a ColumnReferenceExpression.
+        /// </summary>
+        /// <param name="columnReferenceExpression"> The referenced ColumnReferenceExpression. </param>
+        /// <param name="tableExpression"> The target table expression. </param>
+        public ColumnReferenceExpression(
+            [NotNull] ColumnReferenceExpression columnReferenceExpression,
+            [NotNull] TableExpressionBase tableExpression)
+            : this(
+                  Check.NotNull(columnReferenceExpression, nameof(columnReferenceExpression)).Name,
+                  columnReferenceExpression,
+                  Check.NotNull(tableExpression, nameof(tableExpression)))
+        {
+        }
+
+        private ColumnReferenceExpression(string name, Expression expression, TableExpressionBase tableExpression)
+        {
             Name = name;
-            _property = property;
+            _type = expression.Type;
+            _expression = expression;
             _tableExpression = tableExpression;
         }
 
@@ -43,13 +76,10 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         /// </summary>
         public virtual TableExpressionBase Table => _tableExpression;
 
-#pragma warning disable 108
-
         /// <summary>
-        ///     The corresponding property.
+        ///     The referenced expression.
         /// </summary>
-        public virtual IProperty Property => _property;
-#pragma warning restore 108
+        public virtual Expression Expression => _expression;
 
         /// <summary>
         ///     Gets the column name.
@@ -60,16 +90,16 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         public virtual string Name { get; }
 
         /// <summary>
+        ///     Gets the static type of the expression that this <see cref="Expression" /> represents. (Inherited from <see cref="Expression" />.)
+        /// </summary>
+        /// <returns> The <see cref="Type" /> that represents the static type of the expression. </returns>
+        public override Type Type => _type;
+
+        /// <summary>
         ///     Returns the node type of this <see cref="Expression" />. (Inherited from <see cref="Expression" />.)
         /// </summary>
         /// <returns> The <see cref="ExpressionType" /> that represents this expression. </returns>
         public override ExpressionType NodeType => ExpressionType.Extension;
-
-        /// <summary>
-        ///     Gets the static type of the expression that this <see cref="Expression" /> represents. (Inherited from <see cref="Expression" />.)
-        /// </summary>
-        /// <returns> The <see cref="Type" /> that represents the static type of the expression. </returns>
-        public override Type Type => _property.ClrType;
 
         /// <summary>
         ///     Dispatches to the specific visit method for this node type.
@@ -81,7 +111,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             var specificVisitor = visitor as ISqlExpressionVisitor;
 
             return specificVisitor != null
-                ? specificVisitor.VisitColumn(this)
+                ? specificVisitor.VisitColumnReference(this)
                 : base.Accept(visitor);
         }
 
@@ -100,11 +130,11 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         /// </remarks>
         protected override Expression VisitChildren(ExpressionVisitor visitor) => this;
 
-        private bool Equals([NotNull] ColumnExpression other)
-            // Compare on names only because multiple properties can map to same column in inheritance scenario
-            => Name == other.Name
-               && Type == other.Type
-               && Table.Equals(other.Table);
+        private bool Equals([NotNull] ColumnReferenceExpression other)
+            => Equals(_expression, other._expression)
+               && Equals(_tableExpression, other._tableExpression)
+               && _type == other._type
+               && string.Equals(Name, other.Name);
 
         /// <summary>
         ///     Tests if this object is considered equal to another.
@@ -125,8 +155,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
                 return true;
             }
 
-            return obj.GetType() == GetType()
-                   && Equals((ColumnExpression)obj);
+            return obj.GetType() == GetType() && Equals((ColumnReferenceExpression)obj);
         }
 
         /// <summary>
@@ -139,9 +168,10 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
         {
             unchecked
             {
-                var hashCode = _property?.GetHashCode() ?? 0;
-                hashCode = (hashCode * 397) ^ (_tableExpression?.GetHashCode() ?? 0);
-                hashCode = (hashCode * 397) ^ (Name?.GetHashCode() ?? 0);
+                var hashCode = _expression.GetHashCode();
+                hashCode = (hashCode * 397) ^ _tableExpression.GetHashCode();
+                hashCode = (hashCode * 397) ^ _type.GetHashCode();
+                hashCode = (hashCode * 397) ^ Name.GetHashCode();
                 return hashCode;
             }
         }

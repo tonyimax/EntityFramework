@@ -3439,7 +3439,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         {
             AssertQuery<Order, Customer>(
                 (os, cs) => os.Where(
-                    o => o.OrderID <= 10250 
+                    o => o.OrderID <= 10250
                     && cs.OrderBy(
                         c => cs.Any(
                             c2 => c2.CustomerID == "ALFKI"))
@@ -4944,7 +4944,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
                 ods => ods.Where(od => Math.Ceiling(od.UnitPrice) > 10),
                 entryCount: 1677);
         }
-        
+
         [ConditionalFact]
         public virtual void Where_math_floor()
         {
@@ -6031,7 +6031,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
                 cs => cs.Select(c => new { c.CustomerID, c.CompanyName, Region = c.Region ?? "ZZ" }).OrderBy(c => c.Region).Take(5));
         }
 
-        [ConditionalFact(Skip = "The order by inside subquery needs to be aliased to be copied outside. Invalid query generated otherwise.")]
+        [ConditionalFact]
         public virtual void Select_take_skip_null_coalesce_operator()
         {
             AssertQuery<Customer>(
@@ -7099,6 +7099,65 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
                             join o in os on c.CustomerID equals o.CustomerID into lo
                             from o in lo.Where(x => x.OrderID > 5).OrderBy(x => x.OrderDate).DefaultIfEmpty()
                             select new { c.ContactName, o });
+        }
+
+        [ConditionalFact]
+        public virtual void Anonymous_member_distinct_where()
+        {
+            AssertQuery<Customer>(
+                cs => cs.Select(c => new { c.CustomerID }).Distinct().Where(n => n.CustomerID == "ALFKI"));
+        }
+
+        [ConditionalFact]
+        public virtual void Anonymous_member_distinct_orderby()
+        {
+            AssertQuery<Customer>(
+                cs => cs.Select(c => new { c.CustomerID }).Distinct().OrderBy(n => n.CustomerID));
+        }
+
+        [ConditionalFact]
+        public virtual void Anonymous_member_distinct_result()
+        {
+            AssertQuery<Customer>(
+                cs => cs.Select(c => new { c.CustomerID }).Distinct().Count(n => n.CustomerID.StartsWith("A")));
+        }
+
+        [ConditionalFact]
+        public virtual void Anonymous_complex_distinct_where()
+        {
+            AssertQuery<Customer>(
+                cs => cs.Select(c => new { A = c.CustomerID + c.City }).Distinct().Where(n => n.A == "ALFKIBerlin"));
+        }
+
+        [ConditionalFact]
+        public virtual void Anonymous_complex_distinct_orderby()
+        {
+            AssertQuery<Customer>(
+                cs => cs.Select(c => new { A = c.CustomerID + c.City }).Distinct().OrderBy(n => n.A));
+        }
+
+        [ConditionalFact]
+        public virtual void Anonymous_complex_distinct_result()
+        {
+            AssertQuery<Customer>(
+                cs => cs.Select(c => new { A = c.CustomerID + c.City }).Distinct().Count(n => n.A.StartsWith("A")));
+        }
+
+        [ConditionalFact]
+        public virtual void Anonymous_complex_orderby()
+        {
+            AssertQuery<Customer>(
+                cs => cs.Select(c => new { A = c.CustomerID + c.City }).OrderBy(n => n.A));
+        }
+
+        [ConditionalFact]
+        public virtual void Anonymous_subquery_orderby()
+        {
+            AssertQuery<Customer>(
+                cs => cs.Where(c => c.Orders.Count > 1).Select(c => new
+                {
+                    A = c.Orders.OrderByDescending(o => o.OrderID).FirstOrDefault().OrderDate
+                }).OrderBy(n => n.A));
         }
 
         private static IEnumerable<TElement> ClientDefaultIfEmpty<TElement>(IEnumerable<TElement> source)
